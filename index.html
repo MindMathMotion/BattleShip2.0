@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Multiplayer Room</title>
+<style>body{font-family:system-ui;background:#0f172a;color:#f8fafc;max-width:700px;margin:30px auto;padding:0 18px}input,button{padding:12px;border-radius:8px;border:0;margin:5px}button{background:#22c55e;cursor:pointer}#arena{position:relative;width:100%;height:340px;background:#1e293b;border:1px solid #475569;border-radius:12px;touch-action:none;overflow:hidden}.player{position:absolute;transform:translate(-50%,-50%);padding:10px;border-radius:30px;font-weight:bold}.p1{background:#38bdf8;color:#001827}.p2{background:#fbbf24;color:#422006}small{color:#cbd5e1}</style></head>
+<body><h1>Multiplayer Room</h1><p>Share the same room code to play together.</p><label>Room code <input id="room" maxlength="12" value="ABCD"></label><button id="join">Join room</button><p id="status">Not connected</p><p id="who"></p><div id="arena"><div id="p1" class="player p1" style="left:25%;top:50%">P1</div><div id="p2" class="player p2" style="left:75%;top:50%">P2</div></div><p><small>Click or touch the arena to move your player. Both players see the movement.</small></p>
+<script>
+// REPLACE this URL with your Render service URL after deploying, e.g. wss://your-app.onrender.com
+const SERVER_URL = 'wss://REPLACE-WITH-YOUR-RENDER-SERVICE.onrender.com';
+let socket, player;
+const status = document.getElementById('status');
+document.getElementById('join').onclick = () => {
+  const room = document.getElementById('room').value.trim().toUpperCase();
+  if (!/^[A-Z0-9]{4,12}$/.test(room)) { status.textContent = 'Use 4–12 letters or numbers'; return; }
+  if (SERVER_URL.includes('REPLACE-WITH')) { status.textContent = 'Set SERVER_URL in index.html first'; return; }
+  if (socket) socket.close();
+  player = null;
+  socket = new WebSocket(`${SERVER_URL}/game/${room}`);
+  status.textContent = 'Connecting…';
+  socket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === 'joined') { player = data.player; document.getElementById('who').textContent = `You are Player ${player}`; status.textContent = `Connected to room ${data.room}`; }
+    if (data.type === 'players') status.textContent = `Players connected: ${data.count}/2`;
+    if (data.type === 'move') { const dot = document.getElementById(`p${data.player}`); dot.style.left = `${data.x}%`; dot.style.top = `${data.y}%`; }
+    if (data.type === 'error') status.textContent = data.message;
+  };
+  socket.onerror = () => { status.textContent = 'Connection failed. Check server URL and deployment.'; };
+  socket.onclose = () => { player = null; };
+};
+document.getElementById('arena').addEventListener('pointerdown', event => {
+  if (!socket || socket.readyState !== WebSocket.OPEN || !player) return;
+  const rect = event.currentTarget.getBoundingClientRect();
+  const x = Math.max(0, Math.min(100, (event.clientX - rect.left) / rect.width * 100));
+  const y = Math.max(0, Math.min(100, (event.clientY - rect.top) / rect.height * 100));
+  socket.send(JSON.stringify({type:'move', x, y}));
+});
+</script></body></html>
